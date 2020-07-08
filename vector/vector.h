@@ -1,327 +1,356 @@
 #ifndef VECTOR_H
 #define VECTOR_H
 
-#ifdef _GLIBCXX_DEBUG
-#define debug_assert(expression) assert((expression))
-#else
-#define debug_assert(expression) ;
-#endif
-
 #include <cstddef>
-#include <cstring>
-#include <cassert>
-#include <utility>
-#include <algorithm>
+#include <stdexcept>
+#include <sstream>
 
-template<typename T>
-struct vector {
-	typedef T *iterator;
-	typedef T const *const_iterator;
+template <typename T>
+struct vector
+{
+    typedef T* iterator;
+    typedef const T* const_iterator;
 
-	// O(1) nothrow
-	vector();
-	// O(N) strong
-	vector(vector const &other);
-	// O(N) strong
-	vector &operator=(vector const &other);
+    vector();                               // O(1) nothrow
+    vector(const vector &other);                  // O(N) strong
+    vector& operator=(const vector &other); // O(N) strong
 
-	// O(N) nothrow
-	~vector();
+    ~vector();                              // O(N) nothrow
 
-	// O(1) nothrow
-	T &operator[](size_t index);
-	// O(1) nothrow
-	T const &operator[](size_t index) const;
+    T& operator[](size_t i);                // O(1) nothrow
+    const T& operator[](size_t i) const;    // O(1) nothrow
 
-	// O(1) nothrow
-	T *data();
-	// O(1) nothrow
-	T const *data() const;
-	// O(1) nothrow
-	size_t size() const;
+    T* data();                              // O(1) nothrow
+    const T* data() const;                  // O(1) nothrow
+    size_t size() const;                    // O(1) nothrow
 
-	// O(1) nothrow
-	T &front();
-	// O(1) nothrow
-	T const &front() const;
+    T& front();                             // O(1) nothrow
+    const T& front() const;                 // O(1) nothrow
 
-	// O(1) nothrow
-	T &back();
-	// O(1) nothrow
-	T const &back() const;
-	// O(1)* strong
-	void push_back(T const &value);
-	// O(1) nothrow
-	void pop_back();
+    T& back();                              // O(1) nothrow
+    const T& back() const;                  // O(1) nothrow
+    void push_back(const T &val);               // O(1)* strong
+    void pop_back();                        // O(1) nothrow
 
-	// O(1) nothrow
-	bool empty() const;
+    bool empty() const;                     // O(1) nothrow
 
-	// O(1) nothrow
-	size_t capacity() const;
-	// O(N) strong
-	void reserve(size_t);
-	// O(N) strong
-	void shrink_to_fit();
+    size_t capacity() const;                // O(1) nothrow
+    void reserve(size_t);                   // O(N) strong
+    void shrink_to_fit();                   // O(N) strong
 
-	// O(N) nothrow
-	void clear();
+    void clear();                           // O(N) nothrow
 
-	// O(1) nothrow
-	void swap(vector &other);
+    void swap(vector &other);                     // O(1) nothrow
 
-	// O(1) nothrow
-	iterator begin();
-	// O(1) nothrow
-	iterator end();
+    iterator begin();                       // O(1) nothrow
+    iterator end();                         // O(1) nothrow
 
-	// O(1) nothrow
-	const_iterator begin() const;
-	// O(1) nothrow
-	const_iterator end() const;
+    const_iterator begin() const;           // O(1) nothrow
+    const_iterator end() const;             // O(1) nothrow
 
-	// O(N) weak
-	iterator insert(const_iterator pos, T const &value);
+    iterator insert(iterator pos, const T &val); // O(N) weak
+    iterator insert(const_iterator pos, const T &val); // O(N) weak
 
-	// O(N) weak
-	iterator erase(const_iterator pos);
+    iterator erase(iterator pos);           // O(N) weak
+    iterator erase(const_iterator pos);     // O(N) weak
 
-	// O(N) weak
-	iterator erase(const_iterator first, const_iterator last);
+    iterator erase(iterator first, iterator last); // O(N) weak
+    iterator erase(const_iterator first, const_iterator last); // O(N) weak
 
- private:
-	void shrink_to_size(size_t new_size);
-	T *copy_data(T *source, size_t from, size_t count, size_t dest_size);
-	void clear_data_buffer(T *data_buffer, size_t from, size_t count);
+private:
+  void ensure_capacity(size_t);
+  T* new_buffer(size_t new_capacity) const;
+  void destroy_elems(iterator start,  size_t len) const;
+  void delete_buffer(T* buff, size_t len) const;
+  void replace_buffer(size_t new_cap);
+  // exceptions
+  template<typename U>
+  static std::string ptr_to_str(U *ptr);
+  template<typename U>
+  static std::string ptr_to_str(const U *ptr);
 
- private:
-	T *data_;
-	size_t size_;
-	size_t capacity_;
+  // if cond is false, error is thrown
+  void error(bool cond, const std::string &message, int err_code = 0) const;
+  // some string conversions are expensive so it's more convenient to check condition inside of `if`
+  void error(const std::string &message, int err_code = 0) const;
+  static const size_t INVALID_INDEX = 1;
+  static const size_t INVALID_IT = 2;
+  static const size_t INVALID_IT_RANGE = 3;
+
+private:
+  T* data_ = nullptr;
+  size_t size_ = 0;
+  size_t capacity_ = 0;
 };
 
 template<typename T>
-T *vector<T>::copy_data(T *source, size_t from, size_t count, size_t dest_size) {
-	T *destination_ = dest_size == 0 ? nullptr: static_cast<T *>(operator new(dest_size * sizeof(T)));
-	size_t filled_size_ = 0;
-
-	try {
-		for (; filled_size_ < count; filled_size_++) {
-			new(destination_ + filled_size_) T(source[from + filled_size_]);
-		}
-	} catch (...) {
-		clear_data_buffer(destination_, 0, filled_size_);
-		operator delete(destination_);
-		throw;
-	}
-
-	return destination_;
+template<typename U>
+std::string vector<T>::ptr_to_str(U *ptr) {
+  std::ostringstream conv;
+  conv << ptr;
+  return conv.str();
 }
 
 template<typename T>
-void vector<T>::clear_data_buffer(T *data_buffer, size_t from, size_t count) {
-	while (count-- > 0) {
-		data_buffer[from + count].~T();
-	}
+template<typename U>
+std::string vector<T>::ptr_to_str(const U *ptr) {
+  return ptr_to_str(const_cast<U*>(ptr));
 }
 
 template<typename T>
-vector<T>::vector() :
-		data_(nullptr),
-		size_(0),
-		capacity_(0) {}
-
-template<typename T>
-vector<T>::vector(vector<T> const &rhs) {
-	T *data_buffer_ = copy_data(rhs.data_, 0, rhs.size_, rhs.size_);
-	data_ = data_buffer_;
-	size_ = rhs.size_;
-	capacity_ = rhs.size_;
+void vector<T>::error(const std::string &message, int err_code) const {
+  static const std::string ERRS[]  =
+          {"", "invalid index: ", "invalid iterator: ", "invalid iterator range: "};
+  throw std::runtime_error(ERRS[err_code]
+                           + message
+                           + " in vector " + ptr_to_str(this)
+                           + " [size = " + std::to_string(size_) + "]");
 }
 
 template<typename T>
-vector<T> &vector<T>::operator=(vector<T> const &other) {
-	vector<T> temp(other);
-	swap(temp);
-	return *this;
+void vector<T>::error(bool cond, const std::string &message, int err_code) const {
+  if (cond) {
+    error(message, err_code);
+  }
+}
+
+template<typename T>
+void vector<T>::destroy_elems(iterator start, size_t len) const {
+  for (iterator i = start + len; i-- != start; ) {
+    i->~T();
+  }
+}
+
+template<typename T>
+void vector<T>::delete_buffer(T *buff, size_t len) const {
+  destroy_elems(buff, len);
+  operator delete(buff);
+}
+
+template<typename T>
+T* vector<T>::new_buffer(size_t new_capacity) const {
+  T* new_space = new_capacity == 0 ?
+          nullptr : static_cast<T*>(operator new(sizeof(T) * new_capacity));
+  size_t i = 0;
+  try {
+    for (; i < size_; i++) {
+        new(new_space + i)T(data_[i]);
+    }
+  } catch(...) {
+    delete_buffer(new_space, i);
+    throw;
+  }
+  return new_space;
+}
+
+template<typename T>
+void vector<T>::replace_buffer(size_t new_cap) {
+  T* was = data_;
+  data_ = new_buffer(new_cap);
+  delete_buffer(was, size_);
+  capacity_ = new_cap;
+}
+
+template<typename T>
+void vector<T>::ensure_capacity(size_t new_cap) {
+  if (new_cap > capacity_) {
+    replace_buffer(capacity_ * 2 < new_cap ? new_cap : capacity_ * 2);
+  }
+}
+
+template<typename T>
+vector<T>::vector() = default;
+
+template<typename T>
+vector<T>::vector(const vector<T> &other) {
+  data_ = other.new_buffer(other.size_);
+  size_ = other.size_;
+  capacity_ = size_;
+}
+
+template<typename T>
+vector<T>& vector<T>::operator=(const vector<T> &other) {
+  if (this == &other) {
+    return *this;
+  }
+  vector<T> copy(other);
+  swap(copy);
+  return *this;
 }
 
 template<typename T>
 vector<T>::~vector() {
-	clear();
-	operator delete(data_);
-	data_ = nullptr;
+  delete_buffer(data_, size_);
 }
 
 template<typename T>
-T &vector<T>::operator[](size_t index) {
-	debug_assert(index < size_);
-	return data_[index];
+T& vector<T>::operator[](size_t i) {
+  error(i >= size_, std::to_string(i), INVALID_INDEX);
+  return data_[i];
 }
 
 template<typename T>
-T const &vector<T>::operator[](size_t index) const {
-	debug_assert(index < size_);
-	return data_[index];
+const T& vector<T>::operator[](size_t i) const {
+  error(i >= size_, std::to_string(i), INVALID_INDEX);
+  return data_[i];
 }
 
 template<typename T>
-T *vector<T>::data() {
-	return data_;
+T* vector<T>::data() {
+  return data_;
 }
 
 template<typename T>
-T const *vector<T>::data() const {
-	return data_;
+const T* vector<T>::data() const {
+  return data_;
 }
 
 template<typename T>
 size_t vector<T>::size() const {
-	return size_;
+  return size_;
 }
 
 template<typename T>
-T &vector<T>::front() {
-	return *data_;
+T& vector<T>::front() {
+  error(size_ == 0, "no elements");
+  return data_[0];
 }
 
 template<typename T>
-T const &vector<T>::front() const {
-	return *data_;
+const T& vector<T>::front() const {
+  error(size_ == 0, "no elements");
+  return data_[0];
 }
 
 template<typename T>
-T &vector<T>::back() {
-	debug_assert(size_ > 0);
-	return data_[size_ - 1];
+T& vector<T>::back() {
+  error(size_ == 0, "no elements");
+  return data_[size_ - 1];
 }
 
 template<typename T>
-T const &vector<T>::back() const {
-	debug_assert(size_ > 0);
-	return data_[size_ - 1];
+const T& vector<T>::back() const {
+  error(size_ == 0, "no elements");
+  return data_[size_ - 1];
 }
 
 template<typename T>
-void vector<T>::push_back(T const &value) {
-	if (size_ == capacity_) {
-		T push_value(value);
-		reserve(capacity_ > 0 ? capacity_ << 1u : 1);
-		new(data_ + size_) T(push_value);
-	} else {
-		new(data_ + size_) T(value);
-	}
-
-	size_++;
+void vector<T>::push_back(const T &val) {
+  insert(end(), val);
 }
 
 template<typename T>
 void vector<T>::pop_back() {
-	debug_assert(size_ > 0);
-	data_[--size_].~T();
+  error(size_ == 0, "no elements");
+  erase(end() - 1);
 }
 
 template<typename T>
 bool vector<T>::empty() const {
-	return size_ == 0;
+  return size_ == 0;
 }
 
 template<typename T>
 size_t vector<T>::capacity() const {
-	return capacity_;
+  return capacity_;
 }
 
 template<typename T>
-void vector<T>::shrink_to_size(size_t new_size) {
-	T *data_buffer_ = copy_data(data_, 0u, std::min(size_, new_size), new_size);
-	clear_data_buffer(data_, 0u, size_);
-	operator delete(data_);
-	data_ = data_buffer_;
-	capacity_ = new_size;
-}
-
-template<typename T>
-void vector<T>::reserve(size_t size) {
-	if (size > capacity_) {
-		shrink_to_size(size);
-	}
+void vector<T>::reserve(size_t demanded_capacity) {
+  if (demanded_capacity > capacity_) {
+    replace_buffer(demanded_capacity);
+  }
 }
 
 template<typename T>
 void vector<T>::shrink_to_fit() {
-	if (capacity_ != size_) {
-		if (size_ == 0) {
-			operator delete(data_);
-			data_ = nullptr;
-			capacity_ = size_;
-		} else {
-			shrink_to_size(size_);
-		}
-	}
+  if (size_ < capacity_) {
+    replace_buffer(size_);
+  }
 }
 
 template<typename T>
 void vector<T>::clear() {
-	clear_data_buffer(data_, 0, size_);
-	size_ = 0;
-}
-
-template<typename T>
-void vector<T>::swap(vector<T> &other) {
-	std::swap(data_, other.data_);
-	std::swap(size_, other.size_);
-	std::swap(capacity_, other.capacity_);
+  erase(begin(), end());
 }
 
 template<typename T>
 typename vector<T>::iterator vector<T>::begin() {
-	return data_;
+  return data_;
 }
+
 template<typename T>
 typename vector<T>::iterator vector<T>::end() {
-	return data_ + size_;
+  return data_ + size_;
 }
 
 template<typename T>
 typename vector<T>::const_iterator vector<T>::begin() const {
-	return data_;
+  return data_;
 }
+
 template<typename T>
 typename vector<T>::const_iterator vector<T>::end() const {
-	return data_ + size_;
+  return data_ + size_;
 }
 
 template<typename T>
-typename vector<T>::iterator vector<T>::insert(const_iterator pos, T const &value) {
-	debug_assert(begin() <= pos && pos <= end());
-	ptrdiff_t pos_ = pos - data_;
-	push_back(value);
-
-	for (ptrdiff_t i = size_ - 1; i != pos_; --i) {
-		std::swap(data_[i], data_[i - 1]);
-	}
-
-	return begin() + pos_;
+typename vector<T>::iterator vector<T>::insert(vector<T>::iterator pos, const T &val) {
+  if (pos < begin() || pos > end()) {
+    error(ptr_to_str(pos), INVALID_IT);
+  }
+  size_t position = pos - begin();
+  T tempval = val;
+  ensure_capacity(size_ + 1);
+  new(data_ + size_)T(tempval);
+  size_++;
+  for (size_t i = size_; i --> position + 1;) {
+    std::swap(data_[i], data_[i - 1]);
+  }
+  return data_ + position;
 }
 
 template<typename T>
-typename vector<T>::iterator vector<T>::erase(const_iterator pos) {
-	return erase(pos, pos + 1);
+typename vector<T>::iterator vector<T>::insert(vector<T>::const_iterator pos, const T &val) {
+  return insert(const_cast<iterator>(pos), val);
 }
 
 template<typename T>
-typename vector<T>::iterator vector<T>::erase(const_iterator first, const_iterator last) {
-	debug_assert(begin() <= first && first < last && last <= end());
-	ptrdiff_t begin_ = first - data_;
-	ptrdiff_t end_ = last - data_;
-	ptrdiff_t delta_ = end_ - begin_;
-
-	for (size_t i = end_; i < size_; i++) {
-		std::swap(data_[i - delta_], data_[i]);
-	}
-
-	clear_data_buffer(data_, size_ - delta_, delta_);
-	size_ -= delta_;
-	return begin() + begin_;
+typename vector<T>::iterator vector<T>::erase(vector<T>::iterator pos) {
+  return erase(pos, pos + 1);
 }
+
+template<typename T>
+typename vector<T>::iterator vector<T>::erase(vector<T>::const_iterator pos) {
+  return erase(const_cast<iterator>(pos));
+}
+
+template<typename T>
+typename vector<T>::iterator vector<T>::erase(vector<T>::iterator first, vector<T>::iterator last) {
+  if (begin() > first || first > last || last > end()) {
+    error(ptr_to_str(first) + ":" + ptr_to_str(last), INVALID_IT_RANGE);
+  }
+  ptrdiff_t diff = last - first;
+  for (iterator i = first; i != end() - diff; i++) {
+    *i = *(i + diff);
+  }
+  destroy_elems(end() - diff, diff);
+  size_ -= diff;
+  return first + diff;
+}
+
+template<typename T>
+typename vector<T>::iterator vector<T>::erase(
+        vector::const_iterator first,
+        vector::const_iterator last) {
+  return erase(const_cast<iterator>(first), const_cast<iterator>(last));
+}
+
+template<typename T>
+void vector<T>::swap(vector<T> &other) {
+  std::swap(size_, other.size_);
+  std::swap(capacity_, other.capacity_);
+  std::swap(data_, other.data_);
+}
+
 #endif // VECTOR_H
